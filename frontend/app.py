@@ -4,9 +4,9 @@ from pathlib import Path
 import streamlit as st
 
 
-# =========================================================
-# PROJECT ROOT
-# =========================================================
+# ============================================================
+# PROJECT SETUP
+# ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -14,9 +14,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-# =========================================================
+# ============================================================
 # PAGE CONFIGURATION
-# =========================================================
+# ============================================================
 
 st.set_page_config(
     page_title="Multi-Agent Personal Assistant Swarm",
@@ -26,61 +26,85 @@ st.set_page_config(
 )
 
 
-# =========================================================
-# HEADER
-# =========================================================
-
-st.title("🤖 Multi-Agent Personal Assistant Swarm")
+# ============================================================
+# CUSTOM CSS
+# ============================================================
 
 st.markdown(
     """
-### Intelligent Collaborative AI System
+    <style>
 
-A multi-agent AI system that understands a user request,
-routes it to specialized agents, uses memory and tools,
-validates the result, and generates a unified response.
-"""
+    .main-title {
+        font-size: 38px;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .subtitle {
+        font-size: 17px;
+        opacity: 0.75;
+        margin-bottom: 25px;
+    }
+
+    .agent-card {
+        padding: 15px;
+        border-radius: 12px;
+        border: 1px solid rgba(128,128,128,0.25);
+        margin-bottom: 10px;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-st.divider()
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.markdown(
+    '<div class="main-title">'
+    '🤖 Multi-Agent Personal Assistant Swarm'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="subtitle">'
+    'An intelligent collaborative AI system for autonomous task '
+    'planning, execution, validation and personalized assistance.'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 
-# =========================================================
+# ============================================================
 # SIDEBAR
-# =========================================================
+# ============================================================
 
 with st.sidebar:
 
-    st.header("🧠 AI Agents")
+    st.header("🧠 Agent Architecture")
 
-    st.markdown(
-        """
-        **🧠 Supervisor Agent**  
-        Routes the user's request.
+    agents = [
+        ("🧠", "Supervisor Agent"),
+        ("💾", "Memory Agent"),
+        ("🔎", "Research Agent"),
+        ("📊", "Analysis Agent"),
+        ("✍️", "Writing Agent"),
+        ("🔧", "Tool Agent"),
+        ("✅", "Validator Agent"),
+    ]
 
-        **💾 Memory Agent**  
-        Recalls and stores previous interactions.
-
-        **🔎 Research Agent**  
-        Performs structured research.
-
-        **📊 Analysis Agent**  
-        Analyzes research findings.
-
-        **✍️ Writing Agent**  
-        Generates the final response.
-
-        **🔧 Tool Agent**  
-        Performs calculations and tools.
-
-        **✅ Validator Agent**  
-        Checks response quality.
-        """
-    )
+    for icon, name in agents:
+        st.write(
+            f"{icon} **{name}**"
+        )
 
     st.divider()
 
-    st.subheader("⚙️ Technology Stack")
+    st.header("⚙️ Technology")
 
     st.write("🐍 Python")
     st.write("🔗 LangGraph")
@@ -90,7 +114,7 @@ with st.sidebar:
 
     st.divider()
 
-    st.subheader("📌 Project")
+    st.header("📌 Project")
 
     st.write("B.Tech Final Year Project")
     st.write("Artificial Intelligence & Data Science")
@@ -102,26 +126,31 @@ with st.sidebar:
     )
 
 
-# =========================================================
+# ============================================================
 # USER INPUT
-# =========================================================
+# ============================================================
 
-st.subheader("💬 Ask Your Personal Assistant")
+st.subheader(
+    "💬 Ask Your Personal Assistant"
+)
 
 user_request = st.text_area(
     "Enter your task",
     placeholder=(
-        "Example:\n"
-        "What is Artificial Intelligence? "
-        "Explain its benefits, risks and applications."
+        "Examples:\n"
+        "• What is Artificial Intelligence?\n"
+        "• Calculate 25 * 40\n"
+        "• Explain the benefits and risks of AI\n"
+        "• Research cloud computing"
     ),
-    height=140
+    height=140,
+    label_visibility="collapsed"
 )
 
 
-# =========================================================
+# ============================================================
 # EXECUTE TASK
-# =========================================================
+# ============================================================
 
 if st.button(
     "🚀 Execute Task",
@@ -137,16 +166,10 @@ if st.button(
 
     else:
 
-        # -------------------------------------------------
-        # IMPORTANT:
-        # Import workflow only after the user clicks
-        # Execute Task. This keeps Streamlit startup fast.
-        # -------------------------------------------------
-
         from workflows.agent_workflow import build_workflow
 
         with st.spinner(
-            "🤖 Multi-agent system is processing your request..."
+            "🤖 Multi-agent system is working..."
         ):
 
             try:
@@ -154,36 +177,22 @@ if st.button(
                 workflow = build_workflow()
 
                 initial_state = {
-
                     "user_request": user_request,
-
                     "route": "",
-
                     "memory_context": "",
-
                     "research": "",
-
                     "analysis": "",
-
                     "writing": "",
-
                     "validation": "",
-
                     "tool_result": "",
-
                     "final_response": "",
-
                     "memory_saved": False,
-
                     "retry_count": 0
                 }
 
                 result = workflow.invoke(
                     initial_state
                 )
-
-                # Store result so it remains visible
-                # during Streamlit reruns.
 
                 st.session_state["result"] = result
 
@@ -194,36 +203,53 @@ if st.button(
                 )
 
 
-# =========================================================
-# RESULTS
-# =========================================================
+# ============================================================
+# DISPLAY RESULTS
+# ============================================================
 
 if "result" in st.session_state:
 
     result = st.session_state["result"]
 
+    route = result.get(
+        "route",
+        "unknown"
+    )
+
+    memory_saved = result.get(
+        "memory_saved",
+        False
+    )
+
+    retry_count = result.get(
+        "retry_count",
+        0
+    )
+
+    validation = result.get(
+        "validation",
+        ""
+    )
+
+
+    # ========================================================
+    # EXECUTION DASHBOARD
+    # ========================================================
+
     st.divider()
 
-    st.header("📊 Execution Results")
-
-
-    # =====================================================
-    # METRICS
-    # =====================================================
+    st.header(
+        "📊 Execution Dashboard"
+    )
 
     col1, col2, col3, col4 = st.columns(4)
 
 
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # ROUTE
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     with col1:
-
-        route = result.get(
-            "route",
-            "unknown"
-        )
 
         st.metric(
             "Selected Route",
@@ -231,50 +257,37 @@ if "result" in st.session_state:
         )
 
 
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # MEMORY
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     with col2:
 
-        memory_saved = result.get(
-            "memory_saved",
-            False
-        )
-
         st.metric(
-            "Memory Saved",
-            "YES" if memory_saved else "NO"
+            "Memory",
+            "SAVED"
+            if memory_saved
+            else "NOT SAVED"
         )
 
 
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # RETRIES
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     with col3:
 
-        retry_count = result.get(
-            "retry_count",
-            0
-        )
-
         st.metric(
-            "Retry Count",
+            "Retries",
             retry_count
         )
 
 
-    # -----------------------------------------------------
+    # --------------------------------------------------------
     # VALIDATION
-    # -----------------------------------------------------
+    # --------------------------------------------------------
 
     with col4:
-
-        validation = result.get(
-            "validation",
-            ""
-        )
 
         if validation.startswith("PASS"):
 
@@ -294,22 +307,185 @@ if "result" in st.session_state:
         )
 
 
-    # =====================================================
-    # FINAL RESPONSE
-    # =====================================================
+    # ========================================================
+    # AGENT EXECUTION TIMELINE
+    # ========================================================
 
     st.divider()
 
-    st.header("🤖 Final Response")
+    st.header(
+        "🔄 Agent Execution Timeline"
+    )
+
+
+    if route == "research":
+
+        timeline = [
+
+            (
+                "🧠",
+                "Supervisor Agent",
+                "Request routing"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Context retrieval"
+            ),
+
+            (
+                "🔎",
+                "Research Agent",
+                "Information research"
+            ),
+
+            (
+                "📊",
+                "Analysis Agent",
+                "Research analysis"
+            ),
+
+            (
+                "✍️",
+                "Writing Agent",
+                "Response generation"
+            ),
+
+            (
+                "✅",
+                "Validator Agent",
+                "Quality validation"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Interaction storage"
+            )
+        ]
+
+    elif route == "tool":
+
+        timeline = [
+
+            (
+                "🧠",
+                "Supervisor Agent",
+                "Request routing"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Context retrieval"
+            ),
+
+            (
+                "🔧",
+                "Tool Agent",
+                "Tool execution"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Interaction storage"
+            )
+        ]
+
+    else:
+
+        timeline = [
+
+            (
+                "🧠",
+                "Supervisor Agent",
+                "Request routing"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Context retrieval"
+            ),
+
+            (
+                "📝",
+                "Direct Response",
+                "Response generation"
+            ),
+
+            (
+                "💾",
+                "Memory Agent",
+                "Interaction storage"
+            )
+        ]
+
+
+    for index, (
+        icon,
+        agent,
+        description
+    ) in enumerate(
+        timeline,
+        start=1
+    ):
+
+        col1, col2, col3 = st.columns(
+            [1, 3, 6]
+        )
+
+        with col1:
+
+            st.success(
+                f"{index}"
+            )
+
+        with col2:
+
+            st.write(
+                f"**{icon} {agent}**"
+            )
+
+        with col3:
+
+            st.write(
+                description
+            )
+
+
+    # ========================================================
+    # FINAL RESPONSE
+    # ========================================================
+
+    st.divider()
+
+    st.header(
+        "🤖 Final Response"
+    )
 
     final_response = result.get(
         "final_response",
         ""
     )
 
+
     if final_response:
 
-        st.markdown(
+        # IMPORTANT:
+        # Use st.text() instead of st.markdown().
+        #
+        # st.markdown() interprets # and ## as headings and
+        # Streamlit adds heading anchors such as:
+        #
+        # [svg](http://localhost:8501/...)
+        #
+        # st.text() displays the generated response exactly
+        # as returned by the Writing Agent.
+
+        st.text(
             final_response
         )
 
@@ -320,52 +496,138 @@ if "result" in st.session_state:
         )
 
 
-    # =====================================================
-    # AGENT EXECUTION DETAILS
-    # =====================================================
+    # ========================================================
+    # RESEARCH ROUTE DETAILS
+    # ========================================================
 
-    st.divider()
+    if route == "research":
 
-    st.header(
-        "🔄 Agent Execution Details"
-    )
+        st.divider()
 
-
-    route = result.get(
-        "route",
-        ""
-    )
-
-
-    # =====================================================
-    # DIRECT ROUTE
-    # =====================================================
-
-    if route == "direct":
-
-        st.success(
-            "🧠 Supervisor → "
-            "💾 Memory → "
-            "📝 Direct → "
-            "💾 Memory"
+        st.header(
+            "🔬 Agent Outputs"
         )
 
 
-    # =====================================================
-    # TOOL ROUTE
-    # =====================================================
+        # ----------------------------------------------------
+        # RESEARCH AGENT
+        # ----------------------------------------------------
 
-    elif route == "tool":
+        with st.expander(
+            "🔎 Research Agent Output",
+            expanded=False
+        ):
 
-        st.success(
-            "🧠 Supervisor → "
-            "💾 Memory → "
-            "🔧 Tool → "
-            "💾 Memory"
-        )
+            research_output = result.get(
+                "research",
+                ""
+            )
 
-        st.subheader(
-            "🔧 Tool Agent Output"
+            if research_output:
+
+                st.text(
+                    research_output
+                )
+
+            else:
+
+                st.info(
+                    "No research output."
+                )
+
+
+        # ----------------------------------------------------
+        # ANALYSIS AGENT
+        # ----------------------------------------------------
+
+        with st.expander(
+            "📊 Analysis Agent Output",
+            expanded=False
+        ):
+
+            analysis_output = result.get(
+                "analysis",
+                ""
+            )
+
+            if analysis_output:
+
+                st.text(
+                    analysis_output
+                )
+
+            else:
+
+                st.info(
+                    "No analysis output."
+                )
+
+
+        # ----------------------------------------------------
+        # WRITING AGENT
+        # ----------------------------------------------------
+
+        with st.expander(
+            "✍️ Writing Agent Output",
+            expanded=False
+        ):
+
+            writing_output = result.get(
+                "writing",
+                ""
+            )
+
+            if writing_output:
+
+                st.text(
+                    writing_output
+                )
+
+            else:
+
+                st.info(
+                    "No writing output."
+                )
+
+
+        # ----------------------------------------------------
+        # VALIDATOR AGENT
+        # ----------------------------------------------------
+
+        with st.expander(
+            "✅ Validator Agent Result",
+            expanded=True
+        ):
+
+            if validation.startswith("PASS"):
+
+                st.success(
+                    validation
+                )
+
+            elif validation:
+
+                st.warning(
+                    validation
+                )
+
+            else:
+
+                st.info(
+                    "No validation result."
+                )
+
+
+    # ========================================================
+    # TOOL ROUTE DETAILS
+    # ========================================================
+
+    if route == "tool":
+
+        st.divider()
+
+        st.header(
+            "🔧 Tool Execution"
         )
 
         tool_result = result.get(
@@ -383,164 +645,24 @@ if "result" in st.session_state:
         else:
 
             st.info(
-                "No tool output available."
+                "No tool output."
             )
 
 
-    # =====================================================
-    # RESEARCH ROUTE
-    # =====================================================
-
-    elif route == "research":
-
-        st.success(
-            "🧠 Supervisor → "
-            "💾 Memory → "
-            "🔎 Research → "
-            "📊 Analysis → "
-            "✍️ Writing → "
-            "✅ Validator → "
-            "💾 Memory"
-        )
-
-
-        # -------------------------------------------------
-        # RESEARCH AGENT
-        # -------------------------------------------------
-
-        with st.expander(
-            "🔎 Research Agent Output",
-            expanded=True
-        ):
-
-            research_output = result.get(
-                "research",
-                ""
-            )
-
-            if research_output:
-
-                # Use st.text instead of st.markdown.
-                # This preserves the agent's raw output
-                # and prevents Markdown from displaying
-                # strange "- * -" formatting.
-
-                st.text(
-                    research_output
-                )
-
-            else:
-
-                st.info(
-                    "No research output available."
-                )
-
-
-        # -------------------------------------------------
-        # ANALYSIS AGENT
-        # -------------------------------------------------
-
-        with st.expander(
-            "📊 Analysis Agent Output",
-            expanded=True
-        ):
-
-            analysis_output = result.get(
-                "analysis",
-                ""
-            )
-
-            if analysis_output:
-
-                st.text(
-                    analysis_output
-                )
-
-            else:
-
-                st.info(
-                    "No analysis output available."
-                )
-
-
-        # -------------------------------------------------
-        # WRITING AGENT
-        # -------------------------------------------------
-
-        with st.expander(
-            "✍️ Writing Agent Output",
-            expanded=True
-        ):
-
-            writing_output = result.get(
-                "writing",
-                ""
-            )
-
-            if writing_output:
-
-                st.text(
-                    writing_output
-                )
-
-            else:
-
-                st.info(
-                    "No writing output available."
-                )
-
-
-        # -------------------------------------------------
-        # VALIDATOR AGENT
-        # -------------------------------------------------
-
-        with st.expander(
-            "✅ Validator Agent Result",
-            expanded=True
-        ):
-
-            validation_output = result.get(
-                "validation",
-                ""
-            )
-
-            if validation_output:
-
-                if validation_output.startswith(
-                    "PASS"
-                ):
-
-                    st.success(
-                        validation_output
-                    )
-
-                else:
-
-                    st.warning(
-                        validation_output
-                    )
-
-            else:
-
-                st.info(
-                    "No validation result available."
-                )
-
-
-    # =====================================================
-    # MEMORY
-    # =====================================================
+    # ========================================================
+    # MEMORY CONTEXT
+    # ========================================================
 
     st.divider()
 
-    st.header("💾 Memory")
-
+    st.header(
+        "💾 Memory Context"
+    )
 
     memory_context = result.get(
         "memory_context",
         ""
     )
-
 
     if memory_context:
 
@@ -551,41 +673,44 @@ if "result" in st.session_state:
     else:
 
         st.info(
-            "No relevant previous memories were found."
+            "No relevant previous memories found."
         )
 
 
-    # =====================================================
+    # ========================================================
     # REQUEST INFORMATION
-    # =====================================================
+    # ========================================================
 
     st.divider()
 
-    st.subheader(
+    st.header(
         "📋 Request Information"
     )
 
     st.write(
-        f"**User Request:** {result.get('user_request', '')}"
+        f"**Request:** "
+        f"{result.get('user_request', '')}"
     )
 
     st.write(
-        f"**Route:** {result.get('route', '').upper()}"
+        f"**Route:** "
+        f"{route.upper()}"
     )
 
     st.write(
-        f"**Retries:** {result.get('retry_count', 0)}"
+        f"**Retry Count:** "
+        f"{retry_count}"
     )
 
     st.write(
         f"**Memory Saved:** "
-        f"{'Yes' if result.get('memory_saved') else 'No'}"
+        f"{'Yes' if memory_saved else 'No'}"
     )
 
 
-# =========================================================
+# ============================================================
 # FOOTER
-# =========================================================
+# ============================================================
 
 st.divider()
 
