@@ -1,4 +1,3 @@
-import os
 import sqlite3
 import re
 import math
@@ -7,538 +6,277 @@ from collections import Counter
 
 class MemoryStore:
     """
-    SQLite-based long-term memory store.
+    SQLite-based persistent memory store.
 
-    Features:
-    - Persistent memory
-    - Fast storage
-    - Keyword-based semantic-style search
-    - Metadata support
-    - No external model
-    - No internet dependency
+    Stores memories and provides lightweight
+    keyword/cosine-similarity search.
     """
 
     def __init__(self):
-
-        # ------------------------------------------------
-        # Project directory
-        # ------------------------------------------------
-
-        project_root = os.path.dirname(
-            os.path.dirname(
-                os.path.abspath(__file__)
-            )
-        )
-
-        # ------------------------------------------------
-        # Database location
-        # ------------------------------------------------
-
-        self.database_path = os.path.join(
-            project_root,
-            "memory",
-            "memory.db"
-        )
-
         print("\nInitializing SQLite memory database...")
 
-        # ------------------------------------------------
-        # SQLite connection
-        # ------------------------------------------------
+        self.database_path = "memory/memory.db"
 
+        # check_same_thread=False allows the SQLite connection
+        # to be safely used by Streamlit's execution thread.
         self.connection = sqlite3.connect(
-            self.database_path
+            self.database_path,
+            check_same_thread=False
         )
 
-        # ------------------------------------------------
-        # Create memory table
-        # ------------------------------------------------
+        self.cursor = self.connection.cursor()
 
         self._create_table()
 
         print("SQLite memory database ready.")
 
-    # ====================================================
-    # CREATE TABLE
-    # ====================================================
-
     def _create_table(self):
-
-        cursor = self.connection.cursor()
-
-        cursor.execute(
+        self.cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS memories (
-
-                id TEXT PRIMARY KEY,
-
-                memory TEXT NOT NULL,
-
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
                 category TEXT,
-
-                source TEXT,
-
-                created_at TIMESTAMP
-                    DEFAULT CURRENT_TIMESTAMP
-
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
 
         self.connection.commit()
 
-    # ====================================================
-    # TEXT TOKENIZATION
-    # ====================================================
+    def _tokenize(self, text):
+        """
+        Convert text into lowercase word tokens.
+        """
 
-    def _tokenize(self, text: str) -> list[str]:
-
-        words = re.findall(
+        return re.findall(
             r"\b[a-zA-Z0-9]+\b",
             text.lower()
         )
 
-        # Remove very common words
-        stop_words = {
-            "the",
-            "is",
-            "a",
-            "an",
-            "and",
-            "or",
-            "to",
-            "of",
-            "in",
-            "on",
-            "for",
-            "with",
-            "my",
-            "i",
-            "am",
-            "using"
-        }
+    def _calculate_similarity(self, text1, text2):
+        """
+        Calculate cosine similarity between two texts
+        using simple word-frequency vectors.
+        """
 
-        return [
-            word
-            for word in words
-            if word not in stop_words
+        tokens1 = self._tokenize(text1)
+        tokens2 = self._tokenize(text2)
+
+        if not tokens1 or not tokens2:
+            return 0.0
+
+        counter1 = Counter(tokens1)
+        counter2 = Counter(tokens2)
+
+        all_words = set(counter1) | set(counter2)
+
+        vector1 = [
+            counter1.get(word, 0)
+            for word in all_words
         ]
 
-    # ====================================================
-    # SIMILARITY
-    # ====================================================
-
-    def _calculate_similarity(
-        self,
-        query: str,
-        document: str
-    ) -> float:
-
-        query_words = self._tokenize(
-            query
-        )
-
-        document_words = self._tokenize(
-            document
-        )
-
-        if not query_words or not document_words:
-
-            return 0.0
-
-        query_counter = Counter(
-            query_words
-        )
-
-        document_counter = Counter(
-            document_words
-        )
-
-        # ------------------------------------------------
-        # Cosine similarity
-        # ------------------------------------------------
-
-        all_words = set(
-            query_counter.keys()
-        ).union(
-            document_counter.keys()
-        )
-
-        query_vector = []
-        document_vector = []
-
-        for word in all_words:
-
-            query_vector.append(
-                query_counter[word]
-            )
-
-            document_vector.append(
-                document_counter[word]
-            )
+        vector2 = [
+            counter2.get(word, 0)
+            for word in all_words
+        ]
 
         dot_product = sum(
-            q * d
-            for q, d in zip(
-                query_vector,
-                document_vector
-            )
+            a * b
+            for a, b in zip(vector1, vector2)
         )
 
-        query_magnitude = math.sqrt(
-            sum(
-                q * q
-                for q in query_vector
-            )
+        magnitude1 = math.sqrt(
+            sum(a * a for a in vector1)
         )
 
-        document_magnitude = math.sqrt(
-            sum(
-                d * d
-                for d in document_vector
-            )
+        magnitude2 = math.sqrt(
+            sum(b * b for b in vector2)
         )
 
-        if (
-            query_magnitude == 0
-            or document_magnitude == 0
-        ):
-
+        if magnitude1 == 0 or magnitude2 == 0:
             return 0.0
 
-        similarity = (
-            dot_product
-            /
-            (
-                query_magnitude
-                *
-                document_magnitude
-            )
+        return dot_product / (
+            magnitude1 * magnitude2
         )
 
-        return similarity
-
-    # ====================================================
-    # SAVE MEMORY
-    # ====================================================
-
-    def save_memory(
-        self,
-        memory: str,
-        memory_id: str,
-        metadata: dict | None = None
-    ):
-
-        if not memory.strip():
-
-            raise ValueError(
-                "Memory cannot be empty."
-            )
-
-        metadata = metadata or {}
-
-        category = metadata.get(
-            "category",
-            "general"
-        )
-
-        source = metadata.get(
-            "source",
-            "unknown"
-        )
+    def save_memory(self, content, category="general"):
+        """
+        Save a memory into SQLite.
+        """
 
         print("\nSaving memory...")
 
-        cursor = self.connection.cursor()
+        try:
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO memories
-            (
-                id,
-                memory,
-                category,
-                source
+            self.cursor.execute(
+                """
+                SELECT id
+                FROM memories
+                WHERE content = ?
+                """,
+                (content,)
             )
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                memory_id,
-                memory,
-                category,
-                source
+
+            existing = self.cursor.fetchone()
+
+            if existing:
+
+                print("Memory already exists.")
+
+                return None
+
+            self.cursor.execute(
+                """
+                INSERT INTO memories
+                (content, category)
+                VALUES (?, ?)
+                """,
+                (
+                    content,
+                    category
+                )
             )
-        )
 
-        self.connection.commit()
+            self.connection.commit()
 
-        print(
-            "Memory saved successfully."
-        )
+            print("Memory saved successfully.")
 
-    # ====================================================
-    # SEARCH MEMORY
-    # ====================================================
+            return None
+
+        except sqlite3.Error as error:
+
+            print(
+                f"Memory save error: {error}"
+            )
+
+            return None
 
     def search_memory(
         self,
-        query: str,
-        number_of_results: int = 3
-    ) -> list[str]:
+        query,
+        number_of_results=5
+    ):
+        """
+        Search stored memories using
+        cosine similarity.
+        """
 
-        if not query.strip():
+        print("\nSearching memory...")
 
-            return []
-
-        cursor = self.connection.cursor()
-
-        cursor.execute(
+        self.cursor.execute(
             """
             SELECT
                 id,
-                memory
+                content,
+                category,
+                created_at
             FROM memories
             """
         )
 
-        rows = cursor.fetchall()
-
-        if not rows:
-
-            return []
+        rows = self.cursor.fetchall()
 
         scored_results = []
 
-        for memory_id, memory in rows:
+        for row in rows:
 
-            similarity = (
-                self._calculate_similarity(
-                    query,
-                    memory
-                )
+            memory_id = row[0]
+            content = row[1]
+            category = row[2]
+            created_at = row[3]
+
+            similarity = self._calculate_similarity(
+                query,
+                content
             )
 
-            scored_results.append(
-                (
-                    similarity,
-                    memory
-                )
-            )
+            if similarity > 0:
 
-        # ------------------------------------------------
-        # Sort highest similarity first
-        # ------------------------------------------------
+                scored_results.append(
+                    (
+                        similarity,
+                        memory_id,
+                        content,
+                        category,
+                        created_at
+                    )
+                )
 
         scored_results.sort(
             key=lambda item: item[0],
             reverse=True
         )
 
-        # ------------------------------------------------
-        # Return only useful matches
-        # ------------------------------------------------
-
         results = []
 
-        for similarity, memory in scored_results:
+        for item in scored_results[:number_of_results]:
 
-            if similarity > 0:
-
-                results.append(memory)
-
-            if len(results) >= number_of_results:
-
-                break
+            results.append(item[2])
 
         return results
 
-    # ====================================================
-    # MEMORY COUNT
-    # ====================================================
+    def get_memory_count(self):
+        """
+        Return total number of stored memories.
+        """
 
-    def get_memory_count(self) -> int:
-
-        cursor = self.connection.cursor()
-
-        cursor.execute(
+        self.cursor.execute(
             """
             SELECT COUNT(*)
             FROM memories
             """
         )
 
-        result = cursor.fetchone()
+        result = self.cursor.fetchone()
 
         return result[0]
 
-    # ====================================================
-    # CLOSE DATABASE
-    # ====================================================
-
     def close(self):
+        """
+        Close SQLite connection safely.
+        """
 
-        if self.connection:
+        try:
 
-            self.connection.close()
+            if self.connection:
 
+                self.connection.close()
 
-# ========================================================
-# TEST PROGRAM
-# ========================================================
+        except sqlite3.Error:
+            pass
 
-def main():
-
-    print()
-
-    print("=" * 60)
-    print("LONG-TERM MEMORY STORE TEST")
-    print("=" * 60)
-
-    memory = None
-
-    try:
-
-        # ------------------------------------------------
-        # Initialize memory
-        # ------------------------------------------------
-
-        memory = MemoryStore()
-
-        print(
-            f"\nCurrent memories: "
-            f"{memory.get_memory_count()}"
-        )
-
-        # ------------------------------------------------
-        # Test memory
-        # ------------------------------------------------
-
-        test_memory = (
-            "I am building a B.Tech final year "
-            "Multi-Agent Personal Assistant Swarm "
-            "using Python, Gemini and LangGraph."
-        )
-
-        # ------------------------------------------------
-        # Save
-        # ------------------------------------------------
-
-        memory.save_memory(
-            memory=test_memory,
-            memory_id="test_memory_001",
-            metadata={
-                "category": "project",
-                "source": "memory_test"
-            }
-        )
-
-        # ------------------------------------------------
-        # Count
-        # ------------------------------------------------
-
-        print(
-            f"\nTotal memories now: "
-            f"{memory.get_memory_count()}"
-        )
-
-        # ------------------------------------------------
-        # Search
-        # ------------------------------------------------
-
-        query = input(
-            "\nSearch memory:\n> "
-        ).strip()
-
-        if not query:
-
-            print(
-                "\nNo search query entered."
-            )
-
-            return
-
-        print(
-            "\nSearching memory..."
-        )
-
-        results = memory.search_memory(
-            query=query,
-            number_of_results=3
-        )
-
-        # ------------------------------------------------
-        # Display results
-        # ------------------------------------------------
-
-        print()
-
-        print("=" * 60)
-        print("MEMORY SEARCH RESULTS")
-        print("=" * 60)
-
-        if results:
-
-            for index, result in enumerate(
-                results,
-                start=1
-            ):
-
-                print()
-
-                print(
-                    f"{index}. {result}"
-                )
-
-        else:
-
-            print(
-                "\nNo relevant memories found."
-            )
-
-        # ------------------------------------------------
-        # Final count
-        # ------------------------------------------------
-
-        print()
-
-        print("=" * 60)
-
-        print(
-            f"Total stored memories: "
-            f"{memory.get_memory_count()}"
-        )
-
-        print("=" * 60)
-
-    except Exception as error:
-
-        print()
-
-        print("=" * 60)
-        print("MEMORY ERROR")
-        print("=" * 60)
-
-        print(
-            f"Error Type: "
-            f"{type(error).__name__}"
-        )
-
-        print(
-            f"Error Message: "
-            f"{error}"
-        )
-
-    finally:
-
-        if memory:
-
-            memory.close()
-
-
-# ========================================================
-# RUN PROGRAM
-# ========================================================
 
 if __name__ == "__main__":
 
-    main()
+    store = MemoryStore()
+
+    store.save_memory(
+        "I am building a multi-agent AI project.",
+        "project"
+    )
+
+    results = store.search_memory(
+        "multi-agent AI project"
+    )
+
+    print("\n" + "=" * 60)
+    print("MEMORY SEARCH RESULTS")
+    print("=" * 60)
+
+    for index, result in enumerate(
+        results,
+        start=1
+    ):
+
+        print(
+            f"\n{index}. {result}"
+        )
+
+    print(
+        f"\nTotal stored memories: "
+        f"{store.get_memory_count()}"
+    )
+
+    store.close()
