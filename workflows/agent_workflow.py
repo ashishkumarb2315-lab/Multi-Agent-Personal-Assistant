@@ -1,6 +1,10 @@
 import sys
 import os
-from typing import TypedDict
+from datetime import datetime
+from typing import TypedDict, List, Dict, Any
+
+from langgraph.graph import StateGraph, START, END
+
 
 # ============================================================
 # PROJECT ROOT
@@ -19,8 +23,6 @@ if PROJECT_ROOT not in sys.path:
 # ============================================================
 # IMPORT AGENTS
 # ============================================================
-
-from langgraph.graph import StateGraph, START, END
 
 from agents.research_agent import ResearchAgent
 from agents.analysis_agent import AnalysisAgent
@@ -77,6 +79,54 @@ class AgentState(TypedDict):
 
     retry_count: int
 
+    # New field:
+    # Stores the complete agent execution history.
+    activity_log: List[Dict[str, Any]]
+
+
+# ============================================================
+# ACTIVITY LOG HELPER
+# ============================================================
+
+def add_activity(
+    state: AgentState,
+    agent: str,
+    status: str,
+    action: str
+):
+    """
+    Add an event to the agent activity log.
+
+    Example:
+
+    {
+        "agent": "Research Agent",
+        "status": "COMPLETED",
+        "action": "Research completed",
+        "timestamp": "2026-09-25 21:30:00"
+    }
+    """
+
+    current_log = list(
+        state.get(
+            "activity_log",
+            []
+        )
+    )
+
+    current_log.append(
+        {
+            "agent": agent,
+            "status": status,
+            "action": action,
+            "timestamp": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        }
+    )
+
+    return current_log
+
 
 # ============================================================
 # SUPERVISOR
@@ -94,7 +144,15 @@ def supervisor_node(state: AgentState):
     print("\nAnalyzing request:")
     print(user_request)
 
+    activity_log = add_activity(
+        state,
+        "Supervisor Agent",
+        "RUNNING",
+        "Analyzing user request and selecting route"
+    )
+
     request_lower = user_request.lower()
+
 
     # --------------------------------------------------------
     # TOOL KEYWORDS
@@ -114,6 +172,7 @@ def supervisor_node(state: AgentState):
         "current time"
     ]
 
+
     # --------------------------------------------------------
     # RESEARCH KEYWORDS
     # --------------------------------------------------------
@@ -130,6 +189,7 @@ def supervisor_node(state: AgentState):
         "risks",
         "what is"
     ]
+
 
     # --------------------------------------------------------
     # ROUTING
@@ -153,13 +213,27 @@ def supervisor_node(state: AgentState):
 
         route = "direct"
 
+
     print(
         f"\nSupervisor selected route: "
         f"{route.upper()}"
     )
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Supervisor Agent",
+        "COMPLETED",
+        f"Selected {route.upper()} route"
+    )
+
+
     return {
-        "route": route
+        "route": route,
+        "activity_log": activity_log
     }
 
 
@@ -178,10 +252,20 @@ def memory_recall_node(state: AgentState):
 
     print("\nSearching previous memories...")
 
+
+    activity_log = add_activity(
+        state,
+        "Memory Agent",
+        "RUNNING",
+        "Searching previous interactions"
+    )
+
+
     results = memory_agent.recall(
         user_request,
         number_of_results=5
     )
+
 
     if not results:
 
@@ -189,7 +273,9 @@ def memory_recall_node(state: AgentState):
             "No relevant previous memories were found."
         )
 
-        print("\nNo relevant memories found.")
+        print(
+            "\nNo relevant memories found."
+        )
 
     else:
 
@@ -209,11 +295,23 @@ def memory_recall_node(state: AgentState):
         )
 
         print("\nRelevant memories:")
-
         print(memory_context)
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Memory Agent",
+        "COMPLETED",
+        "Memory search completed"
+    )
+
+
     return {
-        "memory_context": memory_context
+        "memory_context": memory_context,
+        "activity_log": activity_log
     }
 
 
@@ -234,13 +332,35 @@ def tool_node(state: AgentState):
         "\nExecuting tool for request..."
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Tool Agent",
+        "RUNNING",
+        "Executing requested tool"
+    )
+
+
     result = tool_agent.execute_tool(
         "calculator",
         user_request
     )
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Tool Agent",
+        "COMPLETED",
+        "Tool execution completed"
+    )
+
+
     return {
-        "tool_result": result
+        "tool_result": result,
+        "activity_log": activity_log
     }
 
 
@@ -260,8 +380,18 @@ def tool_result_node(state: AgentState):
     print("\nResult:")
     print(result)
 
+
+    activity_log = add_activity(
+        state,
+        "Tool Result",
+        "COMPLETED",
+        "Tool result prepared for final response"
+    )
+
+
     return {
-        "final_response": result
+        "final_response": result,
+        "activity_log": activity_log
     }
 
 
@@ -283,6 +413,15 @@ def research_node(state: AgentState):
         "\nSending request to Research Agent..."
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Research Agent",
+        "RUNNING",
+        "Researching requested topic"
+    )
+
+
     research_request = user_request
 
     if memory_context:
@@ -292,14 +431,29 @@ def research_node(state: AgentState):
             + memory_context
         )
 
+
     research = research_agent.research(
         research_request
     )
 
+
     print("\nResearch completed.")
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Research Agent",
+        "COMPLETED",
+        "Research completed successfully"
+    )
+
+
     return {
-        "research": research
+        "research": str(research),
+        "activity_log": activity_log
     }
 
 
@@ -320,14 +474,37 @@ def analysis_node(state: AgentState):
         "\nSending research to Analysis Agent..."
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Analysis Agent",
+        "RUNNING",
+        "Analyzing research findings"
+    )
+
+
     analysis = analysis_agent.analyze(
         research
     )
 
+
     print("\nAnalysis completed.")
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Analysis Agent",
+        "COMPLETED",
+        "Research analysis completed"
+    )
+
+
     return {
-        "analysis": analysis
+        "analysis": str(analysis),
+        "activity_log": activity_log
     }
 
 
@@ -349,15 +526,39 @@ def writing_node(state: AgentState):
         "\nGenerating response..."
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Writing Agent",
+        "RUNNING",
+        "Generating final response"
+    )
+
+
     writing = writing_agent.write(
         research,
         analysis
     )
 
+
     print("\nWriting completed.")
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Writing Agent",
+        "COMPLETED",
+        "Final response generated"
+    )
+
+
     return {
-        "writing": writing
+        "writing": str(writing),
+        "final_response": str(writing),
+        "activity_log": activity_log
     }
 
 
@@ -375,13 +576,39 @@ def validator_node(state: AgentState):
     print("VALIDATOR AGENT")
     print("=" * 60)
 
+
+    activity_log = add_activity(
+        state,
+        "Validator Agent",
+        "RUNNING",
+        "Validating generated response"
+    )
+
+
     validation = validator_agent.validate(
         user_request,
         writing
     )
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Validator Agent",
+        "COMPLETED",
+        (
+            "Validation passed"
+            if validation.startswith("PASS")
+            else "Validation requires review"
+        )
+    )
+
+
     return {
-        "validation": validation
+        "validation": validation,
+        "activity_log": activity_log
     }
 
 
@@ -399,6 +626,7 @@ def route_after_validation(state: AgentState):
     print("VALIDATION ROUTING")
     print("=" * 60)
 
+
     if validation.startswith("PASS"):
 
         print(
@@ -406,6 +634,7 @@ def route_after_validation(state: AgentState):
         )
 
         return "final"
+
 
     if retry_count < MAX_RETRIES:
 
@@ -419,6 +648,7 @@ def route_after_validation(state: AgentState):
         )
 
         return "retry"
+
 
     print(
         "\nMaximum retry limit reached."
@@ -447,8 +677,18 @@ def retry_node(state: AgentState):
         f"{retry_count}"
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Workflow Controller",
+        "RETRY",
+        f"Retrying response generation - attempt {retry_count}"
+    )
+
+
     return {
-        "retry_count": retry_count
+        "retry_count": retry_count,
+        "activity_log": activity_log
     }
 
 
@@ -465,8 +705,18 @@ def final_response_node(state: AgentState):
     print("FINAL RESPONSE")
     print("=" * 60)
 
+
+    activity_log = add_activity(
+        state,
+        "Workflow Controller",
+        "COMPLETED",
+        "Final response approved after validation"
+    )
+
+
     return {
-        "final_response": writing
+        "final_response": writing,
+        "activity_log": activity_log
     }
 
 
@@ -484,8 +734,17 @@ def save_memory_node(state: AgentState):
     print("MEMORY SAVE")
     print("=" * 60)
 
+
+    activity_log = add_activity(
+        state,
+        "Memory Agent",
+        "RUNNING",
+        "Saving completed interaction"
+    )
+
+
     # --------------------------------------------------------
-    # Store a compact interaction summary.
+    # Store compact interaction summary.
     # --------------------------------------------------------
 
     memory_text = (
@@ -493,10 +752,12 @@ def save_memory_node(state: AgentState):
         f"Assistant response: {final_response[:1000]}"
     )
 
+
     saved = memory_agent.remember(
         memory_text,
         category="interaction"
     )
+
 
     if saved:
 
@@ -504,8 +765,27 @@ def save_memory_node(state: AgentState):
             "\nInteraction saved to SQLite memory."
         )
 
+    else:
+
+        print(
+            "\nInteraction processed by SQLite memory."
+        )
+
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Memory Agent",
+        "COMPLETED",
+        "Interaction saved to SQLite memory"
+    )
+
+
     return {
-        "memory_saved": saved
+        "memory_saved": saved,
+        "activity_log": activity_log
     }
 
 
@@ -525,8 +805,18 @@ def validation_failure_node(state: AgentState):
         + validation
     )
 
+
+    activity_log = add_activity(
+        state,
+        "Validator Agent",
+        "FAILED",
+        "Maximum validation retries reached"
+    )
+
+
     return {
-        "final_response": final_response
+        "final_response": final_response,
+        "activity_log": activity_log
     }
 
 
@@ -543,6 +833,15 @@ def direct_node(state: AgentState):
     print("=" * 60)
     print("DIRECT RESPONSE")
     print("=" * 60)
+
+
+    activity_log = add_activity(
+        state,
+        "Direct Response",
+        "RUNNING",
+        "Preparing direct response"
+    )
+
 
     if memory_context and (
         "No relevant previous memories"
@@ -562,8 +861,21 @@ def direct_node(state: AgentState):
             + user_request
         )
 
+
+    activity_log = add_activity(
+        {
+            **state,
+            "activity_log": activity_log
+        },
+        "Direct Response",
+        "COMPLETED",
+        "Direct response prepared"
+    )
+
+
     return {
-        "final_response": response
+        "final_response": response,
+        "activity_log": activity_log
     }
 
 
@@ -595,6 +907,7 @@ def build_workflow():
     workflow = StateGraph(
         AgentState
     )
+
 
     # --------------------------------------------------------
     # ADD NODES
@@ -665,6 +978,7 @@ def build_workflow():
         direct_node
     )
 
+
     # --------------------------------------------------------
     # START
     # --------------------------------------------------------
@@ -674,6 +988,7 @@ def build_workflow():
         "supervisor"
     )
 
+
     # --------------------------------------------------------
     # SUPERVISOR → MEMORY
     # --------------------------------------------------------
@@ -682,6 +997,7 @@ def build_workflow():
         "supervisor",
         "memory_recall"
     )
+
 
     # --------------------------------------------------------
     # MEMORY → ROUTE
@@ -697,6 +1013,7 @@ def build_workflow():
         }
     )
 
+
     # --------------------------------------------------------
     # TOOL
     # --------------------------------------------------------
@@ -710,6 +1027,7 @@ def build_workflow():
         "tool_result",
         "save_memory"
     )
+
 
     # --------------------------------------------------------
     # RESEARCH PIPELINE
@@ -730,6 +1048,7 @@ def build_workflow():
         "validator"
     )
 
+
     # --------------------------------------------------------
     # VALIDATOR ROUTING
     # --------------------------------------------------------
@@ -744,6 +1063,7 @@ def build_workflow():
         }
     )
 
+
     # --------------------------------------------------------
     # RETRY
     # --------------------------------------------------------
@@ -752,6 +1072,7 @@ def build_workflow():
         "retry",
         "writing"
     )
+
 
     # --------------------------------------------------------
     # FINAL
@@ -762,6 +1083,7 @@ def build_workflow():
         "save_memory"
     )
 
+
     # --------------------------------------------------------
     # VALIDATION FAILURE
     # --------------------------------------------------------
@@ -770,6 +1092,7 @@ def build_workflow():
         "validation_failure",
         "save_memory"
     )
+
 
     # --------------------------------------------------------
     # DIRECT
@@ -780,6 +1103,7 @@ def build_workflow():
         "save_memory"
     )
 
+
     # --------------------------------------------------------
     # SAVE MEMORY → END
     # --------------------------------------------------------
@@ -788,6 +1112,7 @@ def build_workflow():
         "save_memory",
         END
     )
+
 
     return workflow.compile()
 
@@ -804,9 +1129,11 @@ def main():
     print("DYNAMIC MULTI-AGENT WORKFLOW")
     print("=" * 60)
 
+
     user_request = input(
         "\nEnter your request:\n> "
     ).strip()
+
 
     if not user_request:
 
@@ -816,7 +1143,9 @@ def main():
 
         return
 
+
     workflow = build_workflow()
+
 
     initial_state: AgentState = {
 
@@ -840,8 +1169,11 @@ def main():
 
         "memory_saved": False,
 
-        "retry_count": 0
+        "retry_count": 0,
+
+        "activity_log": []
     }
+
 
     try:
 
@@ -849,20 +1181,55 @@ def main():
             initial_state
         )
 
+
         print("\n")
         print("=" * 60)
         print("FINAL RESULT")
         print("=" * 60)
+
 
         print(
             "\n"
             + result["final_response"]
         )
 
+
+        print("\n")
+        print("=" * 60)
+        print("AGENT ACTIVITY LOG")
+        print("=" * 60)
+
+
+        for index, event in enumerate(
+            result.get(
+                "activity_log",
+                []
+            ),
+            start=1
+        ):
+
+            print(
+                f"\n{index}. "
+                f"{event['agent']} "
+                f"| {event['status']}"
+            )
+
+            print(
+                f"   Action: "
+                f"{event['action']}"
+            )
+
+            print(
+                f"   Time: "
+                f"{event['timestamp']}"
+            )
+
+
         print("\n")
         print("=" * 60)
         print("MEMORY STATUS")
         print("=" * 60)
+
 
         print(
             "\nMemory saved:",
@@ -872,15 +1239,18 @@ def main():
             )
         )
 
+
         print(
             "Total memories:",
             memory_agent.memory_count()
         )
 
+
         print("\n")
         print("=" * 60)
         print("MULTI-AGENT WORKFLOW COMPLETED")
         print("=" * 60)
+
 
     finally:
 
@@ -892,4 +1262,5 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
+
     main()

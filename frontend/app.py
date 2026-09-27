@@ -46,13 +46,6 @@ st.markdown(
         margin-bottom: 25px;
     }
 
-    .agent-card {
-        padding: 15px;
-        border-radius: 12px;
-        border: 1px solid rgba(128,128,128,0.25);
-        margin-bottom: 10px;
-    }
-
     </style>
     """,
     unsafe_allow_html=True
@@ -98,9 +91,7 @@ with st.sidebar:
     ]
 
     for icon, name in agents:
-        st.write(
-            f"{icon} **{name}**"
-        )
+        st.write(f"{icon} **{name}**")
 
     st.divider()
 
@@ -187,7 +178,8 @@ if st.button(
                     "tool_result": "",
                     "final_response": "",
                     "memory_saved": False,
-                    "retry_count": 0
+                    "retry_count": 0,
+                    "activity_log": []
                 }
 
                 result = workflow.invoke(
@@ -238,16 +230,11 @@ if "result" in st.session_state:
 
     st.divider()
 
-    st.header(
+    st.subheader(
         "📊 Execution Dashboard"
     )
 
     col1, col2, col3, col4 = st.columns(4)
-
-
-    # --------------------------------------------------------
-    # ROUTE
-    # --------------------------------------------------------
 
     with col1:
 
@@ -255,11 +242,6 @@ if "result" in st.session_state:
             "Selected Route",
             route.upper()
         )
-
-
-    # --------------------------------------------------------
-    # MEMORY
-    # --------------------------------------------------------
 
     with col2:
 
@@ -270,11 +252,6 @@ if "result" in st.session_state:
             else "NOT SAVED"
         )
 
-
-    # --------------------------------------------------------
-    # RETRIES
-    # --------------------------------------------------------
-
     with col3:
 
         st.metric(
@@ -282,23 +259,15 @@ if "result" in st.session_state:
             retry_count
         )
 
-
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
-
     with col4:
 
         if validation.startswith("PASS"):
-
             validation_status = "PASS"
 
         elif validation:
-
             validation_status = "CHECK"
 
         else:
-
             validation_status = "N/A"
 
         st.metric(
@@ -313,147 +282,111 @@ if "result" in st.session_state:
 
     st.divider()
 
-    st.header(
+    st.subheader(
         "🔄 Agent Execution Timeline"
     )
 
+    activity_log = result.get(
+        "activity_log",
+        []
+    )
 
-    if route == "research":
+    if activity_log:
 
-        timeline = [
+        for index, event in enumerate(
+            activity_log,
+            start=1
+        ):
 
-            (
-                "🧠",
-                "Supervisor Agent",
-                "Request routing"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Context retrieval"
-            ),
-
-            (
-                "🔎",
-                "Research Agent",
-                "Information research"
-            ),
-
-            (
-                "📊",
-                "Analysis Agent",
-                "Research analysis"
-            ),
-
-            (
-                "✍️",
-                "Writing Agent",
-                "Response generation"
-            ),
-
-            (
-                "✅",
-                "Validator Agent",
-                "Quality validation"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Interaction storage"
+            agent = event.get(
+                "agent",
+                "Unknown Agent"
             )
-        ]
 
-    elif route == "tool":
-
-        timeline = [
-
-            (
-                "🧠",
-                "Supervisor Agent",
-                "Request routing"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Context retrieval"
-            ),
-
-            (
-                "🔧",
-                "Tool Agent",
-                "Tool execution"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Interaction storage"
+            status = event.get(
+                "status",
+                "UNKNOWN"
             )
-        ]
+
+            action = event.get(
+                "action",
+                ""
+            )
+
+            timestamp = event.get(
+                "timestamp",
+                ""
+            )
+
+
+            # ------------------------------------------------
+            # STATUS ICON
+            # ------------------------------------------------
+
+            if status == "COMPLETED":
+
+                status_icon = "✅"
+
+            elif status == "RUNNING":
+
+                status_icon = "🔄"
+
+            elif status == "FAILED":
+
+                status_icon = "❌"
+
+            elif status == "RETRY":
+
+                status_icon = "🔁"
+
+            else:
+
+                status_icon = "ℹ️"
+
+
+            # ------------------------------------------------
+            # TIMELINE
+            # ------------------------------------------------
+
+            with st.container():
+
+                col1, col2, col3 = st.columns(
+                    [1, 3, 6]
+                )
+
+                with col1:
+
+                    st.write(
+                        f"**{index}**"
+                    )
+
+                with col2:
+
+                    st.write(
+                        f"{status_icon} **{agent}**"
+                    )
+
+                    st.caption(
+                        status
+                    )
+
+                with col3:
+
+                    st.write(
+                        action
+                    )
+
+                    if timestamp:
+
+                        st.caption(
+                            f"🕒 {timestamp}"
+                        )
 
     else:
 
-        timeline = [
-
-            (
-                "🧠",
-                "Supervisor Agent",
-                "Request routing"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Context retrieval"
-            ),
-
-            (
-                "📝",
-                "Direct Response",
-                "Response generation"
-            ),
-
-            (
-                "💾",
-                "Memory Agent",
-                "Interaction storage"
-            )
-        ]
-
-
-    for index, (
-        icon,
-        agent,
-        description
-    ) in enumerate(
-        timeline,
-        start=1
-    ):
-
-        col1, col2, col3 = st.columns(
-            [1, 3, 6]
+        st.info(
+            "No agent activity has been recorded."
         )
-
-        with col1:
-
-            st.success(
-                f"{index}"
-            )
-
-        with col2:
-
-            st.write(
-                f"**{icon} {agent}**"
-            )
-
-        with col3:
-
-            st.write(
-                description
-            )
 
 
     # ========================================================
@@ -462,7 +395,7 @@ if "result" in st.session_state:
 
     st.divider()
 
-    st.header(
+    st.subheader(
         "🤖 Final Response"
     )
 
@@ -471,19 +404,12 @@ if "result" in st.session_state:
         ""
     )
 
-
     if final_response:
 
         # IMPORTANT:
-        # Use st.text() instead of st.markdown().
-        #
-        # st.markdown() interprets # and ## as headings and
-        # Streamlit adds heading anchors such as:
-        #
-        # [svg](http://localhost:8501/...)
-        #
-        # st.text() displays the generated response exactly
-        # as returned by the Writing Agent.
+        # Use st.text() instead of st.markdown()
+        # so Markdown headings such as "# Final Response"
+        # do not create Streamlit SVG anchor links.
 
         st.text(
             final_response
@@ -497,20 +423,20 @@ if "result" in st.session_state:
 
 
     # ========================================================
-    # RESEARCH ROUTE DETAILS
+    # RESEARCH ROUTE
     # ========================================================
 
     if route == "research":
 
         st.divider()
 
-        st.header(
+        st.subheader(
             "🔬 Agent Outputs"
         )
 
 
         # ----------------------------------------------------
-        # RESEARCH AGENT
+        # RESEARCH
         # ----------------------------------------------------
 
         with st.expander(
@@ -537,7 +463,7 @@ if "result" in st.session_state:
 
 
         # ----------------------------------------------------
-        # ANALYSIS AGENT
+        # ANALYSIS
         # ----------------------------------------------------
 
         with st.expander(
@@ -564,7 +490,7 @@ if "result" in st.session_state:
 
 
         # ----------------------------------------------------
-        # WRITING AGENT
+        # WRITING
         # ----------------------------------------------------
 
         with st.expander(
@@ -591,7 +517,7 @@ if "result" in st.session_state:
 
 
         # ----------------------------------------------------
-        # VALIDATOR AGENT
+        # VALIDATOR
         # ----------------------------------------------------
 
         with st.expander(
@@ -619,14 +545,14 @@ if "result" in st.session_state:
 
 
     # ========================================================
-    # TOOL ROUTE DETAILS
+    # TOOL ROUTE
     # ========================================================
 
     if route == "tool":
 
         st.divider()
 
-        st.header(
+        st.subheader(
             "🔧 Tool Execution"
         )
 
@@ -655,7 +581,7 @@ if "result" in st.session_state:
 
     st.divider()
 
-    st.header(
+    st.subheader(
         "💾 Memory Context"
     )
 
@@ -683,7 +609,7 @@ if "result" in st.session_state:
 
     st.divider()
 
-    st.header(
+    st.subheader(
         "📋 Request Information"
     )
 
