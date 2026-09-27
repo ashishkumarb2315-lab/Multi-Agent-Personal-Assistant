@@ -1,61 +1,28 @@
-import sys
-import os
-from datetime import datetime
-from typing import TypedDict, List, Dict, Any
+from typing import TypedDict
 
-from langgraph.graph import StateGraph, START, END
-
-
-# ============================================================
-# PROJECT ROOT
-# ============================================================
-
-PROJECT_ROOT = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
+from langgraph.graph import (
+    StateGraph,
+    START,
+    END,
 )
 
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-
-# ============================================================
-# IMPORT AGENTS
-# ============================================================
-
+from agents.supervisor_agent import SupervisorAgent
+from agents.memory_agent import MemoryAgent
 from agents.research_agent import ResearchAgent
 from agents.analysis_agent import AnalysisAgent
 from agents.writing_agent import WritingAgent
 from agents.validator_agent import ValidatorAgent
 from agents.tool_agent import ToolAgent
-from agents.memory_agent import MemoryAgent
 
 
-# ============================================================
-# AGENT INITIALIZATION
-# ============================================================
-
-research_agent = ResearchAgent()
-analysis_agent = AnalysisAgent()
-writing_agent = WritingAgent()
-validator_agent = ValidatorAgent()
-tool_agent = ToolAgent()
-memory_agent = MemoryAgent()
-
-
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
-MAX_RETRIES = 2
-
-
-# ============================================================
-# WORKFLOW STATE
-# ============================================================
+# ================================================================
+# STATE
+# ================================================================
 
 class AgentState(TypedDict):
+    """
+    Shared state passed between all agents.
+    """
 
     user_request: str
 
@@ -79,1077 +46,48 @@ class AgentState(TypedDict):
 
     retry_count: int
 
-    # New field:
-    # Stores the complete agent execution history.
-    activity_log: List[Dict[str, Any]]
+
+# ================================================================
+# CONSTANTS
+# ================================================================
+
+MAX_RETRIES = 2
 
 
-# ============================================================
-# ACTIVITY LOG HELPER
-# ============================================================
+# ================================================================
+# AGENTS
+# ================================================================
 
-def add_activity(
-    state: AgentState,
-    agent: str,
-    status: str,
-    action: str
-):
+supervisor_agent = SupervisorAgent()
+
+memory_agent = MemoryAgent()
+
+research_agent = ResearchAgent()
+
+analysis_agent = AnalysisAgent()
+
+writing_agent = WritingAgent()
+
+validator_agent = ValidatorAgent()
+
+tool_agent = ToolAgent()
+
+
+# ================================================================
+# INITIAL STATE
+# ================================================================
+
+def create_initial_state(
+    user_request: str
+) -> AgentState:
     """
-    Add an event to the agent activity log.
-
-    Example:
-
-    {
-        "agent": "Research Agent",
-        "status": "COMPLETED",
-        "action": "Research completed",
-        "timestamp": "2026-09-25 21:30:00"
-    }
+    Create the initial workflow state.
     """
 
-    current_log = list(
-        state.get(
-            "activity_log",
-            []
-        )
-    )
-
-    current_log.append(
-        {
-            "agent": agent,
-            "status": status,
-            "action": action,
-            "timestamp": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
-        }
-    )
-
-    return current_log
-
-
-# ============================================================
-# SUPERVISOR
-# ============================================================
-
-def supervisor_node(state: AgentState):
-
-    user_request = state["user_request"]
-
-    print("\n")
-    print("=" * 60)
-    print("SUPERVISOR AGENT")
-    print("=" * 60)
-
-    print("\nAnalyzing request:")
-    print(user_request)
-
-    activity_log = add_activity(
-        state,
-        "Supervisor Agent",
-        "RUNNING",
-        "Analyzing user request and selecting route"
-    )
-
-    request_lower = user_request.lower()
-
-
-    # --------------------------------------------------------
-    # TOOL KEYWORDS
-    # --------------------------------------------------------
-
-    tool_keywords = [
-        "calculate",
-        "calculator",
-        "compute",
-        "percentage",
-        "percent",
-        "sum",
-        "multiply",
-        "divide",
-        "date",
-        "time",
-        "current time"
-    ]
-
-
-    # --------------------------------------------------------
-    # RESEARCH KEYWORDS
-    # --------------------------------------------------------
-
-    research_keywords = [
-        "research",
-        "explain",
-        "latest",
-        "information",
-        "compare",
-        "advantages",
-        "disadvantages",
-        "benefits",
-        "risks",
-        "what is"
-    ]
-
-
-    # --------------------------------------------------------
-    # ROUTING
-    # --------------------------------------------------------
-
-    if any(
-        keyword in request_lower
-        for keyword in tool_keywords
-    ):
-
-        route = "tool"
-
-    elif any(
-        keyword in request_lower
-        for keyword in research_keywords
-    ):
-
-        route = "research"
-
-    else:
-
-        route = "direct"
-
-
-    print(
-        f"\nSupervisor selected route: "
-        f"{route.upper()}"
-    )
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Supervisor Agent",
-        "COMPLETED",
-        f"Selected {route.upper()} route"
-    )
-
-
     return {
-        "route": route,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# MEMORY RECALL
-# ============================================================
-
-def memory_recall_node(state: AgentState):
-
-    user_request = state["user_request"]
-
-    print("\n")
-    print("=" * 60)
-    print("MEMORY AGENT")
-    print("=" * 60)
-
-    print("\nSearching previous memories...")
-
-
-    activity_log = add_activity(
-        state,
-        "Memory Agent",
-        "RUNNING",
-        "Searching previous interactions"
-    )
-
-
-    results = memory_agent.recall(
-        user_request,
-        number_of_results=5
-    )
-
-
-    if not results:
-
-        memory_context = (
-            "No relevant previous memories were found."
-        )
-
-        print(
-            "\nNo relevant memories found."
-        )
-
-    else:
-
-        memory_lines = []
-
-        for index, result in enumerate(
-            results,
-            start=1
-        ):
-
-            memory_lines.append(
-                f"{index}. {result}"
-            )
-
-        memory_context = "\n".join(
-            memory_lines
-        )
-
-        print("\nRelevant memories:")
-        print(memory_context)
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Memory Agent",
-        "COMPLETED",
-        "Memory search completed"
-    )
-
-
-    return {
-        "memory_context": memory_context,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# TOOL NODE
-# ============================================================
-
-def tool_node(state: AgentState):
-
-    user_request = state["user_request"]
-
-    print("\n")
-    print("=" * 60)
-    print("TOOL AGENT")
-    print("=" * 60)
-
-    print(
-        "\nExecuting tool for request..."
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Tool Agent",
-        "RUNNING",
-        "Executing requested tool"
-    )
-
-
-    result = tool_agent.execute_tool(
-        "calculator",
-        user_request
-    )
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Tool Agent",
-        "COMPLETED",
-        "Tool execution completed"
-    )
-
-
-    return {
-        "tool_result": result,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# TOOL RESULT NODE
-# ============================================================
-
-def tool_result_node(state: AgentState):
-
-    print("\n")
-    print("=" * 60)
-    print("TOOL RESULT")
-    print("=" * 60)
-
-    result = state["tool_result"]
-
-    print("\nResult:")
-    print(result)
-
-
-    activity_log = add_activity(
-        state,
-        "Tool Result",
-        "COMPLETED",
-        "Tool result prepared for final response"
-    )
-
-
-    return {
-        "final_response": result,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# RESEARCH NODE
-# ============================================================
-
-def research_node(state: AgentState):
-
-    user_request = state["user_request"]
-    memory_context = state["memory_context"]
-
-    print("\n")
-    print("=" * 60)
-    print("RESEARCH AGENT")
-    print("=" * 60)
-
-    print(
-        "\nSending request to Research Agent..."
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Research Agent",
-        "RUNNING",
-        "Researching requested topic"
-    )
-
-
-    research_request = user_request
-
-    if memory_context:
-
-        research_request += (
-            "\n\nRelevant previous memory:\n"
-            + memory_context
-        )
-
-
-    research = research_agent.research(
-        research_request
-    )
-
-
-    print("\nResearch completed.")
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Research Agent",
-        "COMPLETED",
-        "Research completed successfully"
-    )
-
-
-    return {
-        "research": str(research),
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# ANALYSIS NODE
-# ============================================================
-
-def analysis_node(state: AgentState):
-
-    research = state["research"]
-
-    print("\n")
-    print("=" * 60)
-    print("ANALYSIS AGENT")
-    print("=" * 60)
-
-    print(
-        "\nSending research to Analysis Agent..."
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Analysis Agent",
-        "RUNNING",
-        "Analyzing research findings"
-    )
-
-
-    analysis = analysis_agent.analyze(
-        research
-    )
-
-
-    print("\nAnalysis completed.")
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Analysis Agent",
-        "COMPLETED",
-        "Research analysis completed"
-    )
-
-
-    return {
-        "analysis": str(analysis),
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# WRITING NODE
-# ============================================================
-
-def writing_node(state: AgentState):
-
-    research = state["research"]
-    analysis = state["analysis"]
-
-    print("\n")
-    print("=" * 60)
-    print("WRITING AGENT")
-    print("=" * 60)
-
-    print(
-        "\nGenerating response..."
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Writing Agent",
-        "RUNNING",
-        "Generating final response"
-    )
-
-
-    writing = writing_agent.write(
-        research,
-        analysis
-    )
-
-
-    print("\nWriting completed.")
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Writing Agent",
-        "COMPLETED",
-        "Final response generated"
-    )
-
-
-    return {
-        "writing": str(writing),
-        "final_response": str(writing),
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# VALIDATOR NODE
-# ============================================================
-
-def validator_node(state: AgentState):
-
-    user_request = state["user_request"]
-    writing = state["writing"]
-
-    print("\n")
-    print("=" * 60)
-    print("VALIDATOR AGENT")
-    print("=" * 60)
-
-
-    activity_log = add_activity(
-        state,
-        "Validator Agent",
-        "RUNNING",
-        "Validating generated response"
-    )
-
-
-    validation = validator_agent.validate(
-        user_request,
-        writing
-    )
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Validator Agent",
-        "COMPLETED",
-        (
-            "Validation passed"
-            if validation.startswith("PASS")
-            else "Validation requires review"
-        )
-    )
-
-
-    return {
-        "validation": validation,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# VALIDATION ROUTER
-# ============================================================
-
-def route_after_validation(state: AgentState):
-
-    validation = state["validation"]
-    retry_count = state["retry_count"]
-
-    print("\n")
-    print("=" * 60)
-    print("VALIDATION ROUTING")
-    print("=" * 60)
-
-
-    if validation.startswith("PASS"):
-
-        print(
-            "\nValidation status: PASS"
-        )
-
-        return "final"
-
-
-    if retry_count < MAX_RETRIES:
-
-        print(
-            "\nValidation status: FAIL"
-        )
-
-        print(
-            f"Retrying... "
-            f"Attempt {retry_count + 1}"
-        )
-
-        return "retry"
-
-
-    print(
-        "\nMaximum retry limit reached."
-    )
-
-    return "failure"
-
-
-# ============================================================
-# RETRY NODE
-# ============================================================
-
-def retry_node(state: AgentState):
-
-    retry_count = state["retry_count"]
-
-    retry_count += 1
-
-    print("\n")
-    print("=" * 60)
-    print("RETRY NODE")
-    print("=" * 60)
-
-    print(
-        f"\nRetry attempt: "
-        f"{retry_count}"
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Workflow Controller",
-        "RETRY",
-        f"Retrying response generation - attempt {retry_count}"
-    )
-
-
-    return {
-        "retry_count": retry_count,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# FINAL RESPONSE NODE
-# ============================================================
-
-def final_response_node(state: AgentState):
-
-    writing = state["writing"]
-
-    print("\n")
-    print("=" * 60)
-    print("FINAL RESPONSE")
-    print("=" * 60)
-
-
-    activity_log = add_activity(
-        state,
-        "Workflow Controller",
-        "COMPLETED",
-        "Final response approved after validation"
-    )
-
-
-    return {
-        "final_response": writing,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# SAVE MEMORY NODE
-# ============================================================
-
-def save_memory_node(state: AgentState):
-
-    user_request = state["user_request"]
-    final_response = state["final_response"]
-
-    print("\n")
-    print("=" * 60)
-    print("MEMORY SAVE")
-    print("=" * 60)
-
-
-    activity_log = add_activity(
-        state,
-        "Memory Agent",
-        "RUNNING",
-        "Saving completed interaction"
-    )
-
-
-    # --------------------------------------------------------
-    # Store compact interaction summary.
-    # --------------------------------------------------------
-
-    memory_text = (
-        f"User request: {user_request}\n"
-        f"Assistant response: {final_response[:1000]}"
-    )
-
-
-    saved = memory_agent.remember(
-        memory_text,
-        category="interaction"
-    )
-
-
-    if saved:
-
-        print(
-            "\nInteraction saved to SQLite memory."
-        )
-
-    else:
-
-        print(
-            "\nInteraction processed by SQLite memory."
-        )
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Memory Agent",
-        "COMPLETED",
-        "Interaction saved to SQLite memory"
-    )
-
-
-    return {
-        "memory_saved": saved,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# VALIDATION FAILURE NODE
-# ============================================================
-
-def validation_failure_node(state: AgentState):
-
-    validation = state["validation"]
-
-    final_response = (
-        "The generated response could not pass "
-        "validation after the maximum number "
-        "of retry attempts.\n\n"
-        "Validation details:\n"
-        + validation
-    )
-
-
-    activity_log = add_activity(
-        state,
-        "Validator Agent",
-        "FAILED",
-        "Maximum validation retries reached"
-    )
-
-
-    return {
-        "final_response": final_response,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# DIRECT NODE
-# ============================================================
-
-def direct_node(state: AgentState):
-
-    user_request = state["user_request"]
-    memory_context = state["memory_context"]
-
-    print("\n")
-    print("=" * 60)
-    print("DIRECT RESPONSE")
-    print("=" * 60)
-
-
-    activity_log = add_activity(
-        state,
-        "Direct Response",
-        "RUNNING",
-        "Preparing direct response"
-    )
-
-
-    if memory_context and (
-        "No relevant previous memories"
-        not in memory_context
-    ):
-
-        response = (
-            f"Request:\n{user_request}\n\n"
-            f"Relevant previous memory:\n"
-            f"{memory_context}"
-        )
-
-    else:
-
-        response = (
-            "Request received:\n"
-            + user_request
-        )
-
-
-    activity_log = add_activity(
-        {
-            **state,
-            "activity_log": activity_log
-        },
-        "Direct Response",
-        "COMPLETED",
-        "Direct response prepared"
-    )
-
-
-    return {
-        "final_response": response,
-        "activity_log": activity_log
-    }
-
-
-# ============================================================
-# ROUTER AFTER SUPERVISOR
-# ============================================================
-
-def route_after_supervisor(state: AgentState):
-
-    route = state["route"]
-
-    if route == "tool":
-
-        return "tool"
-
-    if route == "research":
-
-        return "research"
-
-    return "direct"
-
-
-# ============================================================
-# BUILD WORKFLOW
-# ============================================================
-
-def build_workflow():
-
-    workflow = StateGraph(
-        AgentState
-    )
-
-
-    # --------------------------------------------------------
-    # ADD NODES
-    # --------------------------------------------------------
-
-    workflow.add_node(
-        "supervisor",
-        supervisor_node
-    )
-
-    workflow.add_node(
-        "memory_recall",
-        memory_recall_node
-    )
-
-    workflow.add_node(
-        "tool",
-        tool_node
-    )
-
-    workflow.add_node(
-        "tool_result",
-        tool_result_node
-    )
-
-    workflow.add_node(
-        "research",
-        research_node
-    )
-
-    workflow.add_node(
-        "analysis",
-        analysis_node
-    )
-
-    workflow.add_node(
-        "writing",
-        writing_node
-    )
-
-    workflow.add_node(
-        "validator",
-        validator_node
-    )
-
-    workflow.add_node(
-        "retry",
-        retry_node
-    )
-
-    workflow.add_node(
-        "final",
-        final_response_node
-    )
-
-    workflow.add_node(
-        "save_memory",
-        save_memory_node
-    )
-
-    workflow.add_node(
-        "validation_failure",
-        validation_failure_node
-    )
-
-    workflow.add_node(
-        "direct",
-        direct_node
-    )
-
-
-    # --------------------------------------------------------
-    # START
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        START,
-        "supervisor"
-    )
-
-
-    # --------------------------------------------------------
-    # SUPERVISOR → MEMORY
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "supervisor",
-        "memory_recall"
-    )
-
-
-    # --------------------------------------------------------
-    # MEMORY → ROUTE
-    # --------------------------------------------------------
-
-    workflow.add_conditional_edges(
-        "memory_recall",
-        route_after_supervisor,
-        {
-            "tool": "tool",
-            "research": "research",
-            "direct": "direct"
-        }
-    )
-
-
-    # --------------------------------------------------------
-    # TOOL
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "tool",
-        "tool_result"
-    )
-
-    workflow.add_edge(
-        "tool_result",
-        "save_memory"
-    )
-
-
-    # --------------------------------------------------------
-    # RESEARCH PIPELINE
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "research",
-        "analysis"
-    )
-
-    workflow.add_edge(
-        "analysis",
-        "writing"
-    )
-
-    workflow.add_edge(
-        "writing",
-        "validator"
-    )
-
-
-    # --------------------------------------------------------
-    # VALIDATOR ROUTING
-    # --------------------------------------------------------
-
-    workflow.add_conditional_edges(
-        "validator",
-        route_after_validation,
-        {
-            "final": "final",
-            "retry": "retry",
-            "failure": "validation_failure"
-        }
-    )
-
-
-    # --------------------------------------------------------
-    # RETRY
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "retry",
-        "writing"
-    )
-
-
-    # --------------------------------------------------------
-    # FINAL
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "final",
-        "save_memory"
-    )
-
-
-    # --------------------------------------------------------
-    # VALIDATION FAILURE
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "validation_failure",
-        "save_memory"
-    )
-
-
-    # --------------------------------------------------------
-    # DIRECT
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "direct",
-        "save_memory"
-    )
-
-
-    # --------------------------------------------------------
-    # SAVE MEMORY → END
-    # --------------------------------------------------------
-
-    workflow.add_edge(
-        "save_memory",
-        END
-    )
-
-
-    return workflow.compile()
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-def main():
-
-    print("\n")
-    print("=" * 60)
-    print("MULTI-AGENT PERSONAL ASSISTANT SWARM")
-    print("DYNAMIC MULTI-AGENT WORKFLOW")
-    print("=" * 60)
-
-
-    user_request = input(
-        "\nEnter your request:\n> "
-    ).strip()
-
-
-    if not user_request:
-
-        print(
-            "\nPlease enter a valid request."
-        )
-
-        return
-
-
-    workflow = build_workflow()
-
-
-    initial_state: AgentState = {
-
-        "user_request": user_request,
+        "user_request": str(
+            user_request
+        ),
 
         "route": "",
 
@@ -1170,97 +108,907 @@ def main():
         "memory_saved": False,
 
         "retry_count": 0,
-
-        "activity_log": []
     }
 
 
+# ================================================================
+# SUPERVISOR NODE
+# ================================================================
+
+def supervisor_node(
+    state: AgentState
+):
+    """
+    Decide which route should handle the request.
+    """
+
+    user_request = state[
+        "user_request"
+    ]
+
+    route = supervisor_agent.route(
+        user_request
+    )
+
+    return {
+        "route": route
+    }
+
+
+# ================================================================
+# ROUTER
+# ================================================================
+
+def route_after_supervisor(
+    state: AgentState
+):
+    """
+    Select the next workflow path.
+    """
+
+    route = state.get(
+        "route",
+        "direct"
+    )
+
+    if route == "research":
+        return "memory"
+
+    if route == "tool":
+        return "tool"
+
+    return "direct"
+
+
+# ================================================================
+# MEMORY NODE
+# ================================================================
+
+def memory_node(
+    state: AgentState
+):
+    """
+    Recall relevant previous memories.
+
+    Memory is supplied to research only when it is relevant.
+    """
+
+    user_request = state[
+        "user_request"
+    ]
+
     try:
 
-        result = workflow.invoke(
-            initial_state
-        )
-
-
-        print("\n")
-        print("=" * 60)
-        print("FINAL RESULT")
-        print("=" * 60)
-
-
         print(
-            "\n"
-            + result["final_response"]
+            "\nSearching memory..."
         )
 
+        memories = memory_agent.recall_memory(
+            user_request,
+            5
+        )
 
-        print("\n")
-        print("=" * 60)
-        print("AGENT ACTIVITY LOG")
-        print("=" * 60)
+    except Exception:
+
+        memories = []
+
+    if memories:
+
+        memory_context = (
+            "\n\n".join(
+                str(memory)
+                for memory in memories
+            )
+        )
+
+    else:
+
+        memory_context = ""
+
+    return {
+        "memory_context": memory_context
+    }
 
 
-        for index, event in enumerate(
-            result.get(
-                "activity_log",
-                []
-            ),
-            start=1
+# ================================================================
+# RESEARCH NODE
+# ================================================================
+
+def research_node(
+    state: AgentState
+):
+    """
+    Execute the Research Agent.
+    """
+
+    user_request = state[
+        "user_request"
+    ]
+
+    memory_context = state.get(
+        "memory_context",
+        ""
+    )
+
+    research = research_agent.research(
+        user_request,
+        memory_context
+    )
+
+    return {
+        "research": research
+    }
+
+
+# ================================================================
+# ANALYSIS NODE
+# ================================================================
+
+def analysis_node(
+    state: AgentState
+):
+    """
+    Execute the Analysis Agent.
+    """
+
+    research = state.get(
+        "research",
+        ""
+    )
+
+    user_request = state[
+        "user_request"
+    ]
+
+    analysis = analysis_agent.analyze(
+        research,
+        user_request
+    )
+
+    return {
+        "analysis": analysis
+    }
+
+
+# ================================================================
+# WRITING NODE
+# ================================================================
+
+def writing_node(
+    state: AgentState
+):
+    """
+    Execute the Writing Agent.
+    """
+
+    research = state.get(
+        "research",
+        ""
+    )
+
+    analysis = state.get(
+        "analysis",
+        ""
+    )
+
+    user_request = state[
+        "user_request"
+    ]
+
+    writing = writing_agent.write(
+        research,
+        analysis,
+        "structured response",
+        user_request
+    )
+
+    return {
+        "writing": writing
+    }
+
+
+# ================================================================
+# VALIDATION NODE
+# ================================================================
+
+def validation_node(
+    state: AgentState
+):
+    """
+    Validate the generated response.
+    """
+
+    user_request = state[
+        "user_request"
+    ]
+
+    writing = state.get(
+        "writing",
+        ""
+    )
+
+    validation = validator_agent.validate(
+        user_request,
+        writing
+    )
+
+    return {
+        "validation": validation
+    }
+
+
+# ================================================================
+# VALIDATION ROUTER
+# ================================================================
+
+def route_after_validation(
+    state: AgentState
+):
+    """
+    Decide whether to retry writing or finish.
+    """
+
+    validation = state.get(
+        "validation",
+        ""
+    ).upper()
+
+    retry_count = state.get(
+        "retry_count",
+        0
+    )
+
+    if "PASS" in validation:
+
+        return "final"
+
+    if retry_count < MAX_RETRIES:
+
+        return "retry"
+
+    return "validation_failure"
+
+
+# ================================================================
+# RETRY NODE
+# ================================================================
+
+def retry_node(
+    state: AgentState
+):
+    """
+    Increment the retry counter before regenerating
+    the written response.
+    """
+
+    retry_count = state.get(
+        "retry_count",
+        0
+    )
+
+    return {
+        "retry_count": retry_count + 1
+    }
+
+
+# ================================================================
+# VALIDATION FAILURE NODE
+# ================================================================
+
+def validation_failure_node(
+    state: AgentState
+):
+    """
+    Create a safe final response when validation
+    fails after the maximum retry count.
+    """
+
+    writing = state.get(
+        "writing",
+        ""
+    )
+
+    validation = state.get(
+        "validation",
+        ""
+    )
+
+    if writing:
+
+        final_response = writing
+
+    else:
+
+        final_response = (
+            "The system could not generate a validated "
+            "response for the requested task.\n\n"
+            f"Validation result:\n{validation}"
+        )
+
+    return {
+        "final_response": final_response
+    }
+
+
+# ================================================================
+# FINAL RESPONSE NODE
+# ================================================================
+
+def final_response_node(
+    state: AgentState
+):
+    """
+    Move the validated writing into final_response.
+    """
+
+    writing = state.get(
+        "writing",
+        ""
+    )
+
+    return {
+        "final_response": writing
+    }
+
+
+# ================================================================
+# TOOL ARGUMENT EXTRACTION
+# ================================================================
+
+def extract_calculator_expression(
+    user_request: str
+):
+    """
+    Extract a mathematical expression from a calculator request.
+
+    Example:
+
+        calculate 25 * 40 + 100
+
+    becomes:
+
+        25 * 40 + 100
+    """
+
+    request = str(
+        user_request
+    ).strip()
+
+    lower_request = request.lower()
+
+    prefixes = [
+        "calculate",
+        "calculator",
+        "compute",
+        "what is",
+        "solve",
+    ]
+
+    expression = request
+
+    for prefix in prefixes:
+
+        if lower_request.startswith(
+            prefix
         ):
 
-            print(
-                f"\n{index}. "
-                f"{event['agent']} "
-                f"| {event['status']}"
-            )
+            expression = request[
+                len(prefix):
+            ].strip()
 
-            print(
-                f"   Action: "
-                f"{event['action']}"
-            )
+            break
 
-            print(
-                f"   Time: "
-                f"{event['timestamp']}"
-            )
+    # Remove common punctuation.
+    expression = expression.strip(
+        " :?="
+    )
+
+    return expression
 
 
-        print("\n")
-        print("=" * 60)
-        print("MEMORY STATUS")
-        print("=" * 60)
+# ================================================================
+# TOOL NODE
+# ================================================================
 
+def tool_node(
+    state: AgentState
+):
+    """
+    Execute the appropriate tool.
+    """
 
-        print(
-            "\nMemory saved:",
-            result.get(
-                "memory_saved",
-                False
-            )
+    user_request = state[
+        "user_request"
+    ]
+
+    route = state.get(
+        "route",
+        ""
+    )
+
+    request_lower = user_request.lower()
+
+    # ------------------------------------------------------------
+    # Calculator
+    # ------------------------------------------------------------
+
+    calculator_keywords = [
+        "calculate",
+        "calculator",
+        "compute",
+        "percentage",
+        "percent",
+        "sum",
+        "multiply",
+        "divide",
+        "solve",
+    ]
+
+    is_calculation = (
+        route == "tool"
+        and any(
+            keyword in request_lower
+            for keyword in calculator_keywords
+        )
+    )
+
+    if is_calculation:
+
+        expression = extract_calculator_expression(
+            user_request
         )
 
-
-        print(
-            "Total memories:",
-            memory_agent.memory_count()
+        result = tool_agent.execute_tool(
+            "calculator",
+            expression
         )
 
+    # ------------------------------------------------------------
+    # Date / Time
+    # ------------------------------------------------------------
 
-        print("\n")
-        print("=" * 60)
-        print("MULTI-AGENT WORKFLOW COMPLETED")
-        print("=" * 60)
+    elif (
+        "time" in request_lower
+        or "date" in request_lower
+    ):
+
+        result = tool_agent.execute_tool(
+            "datetime",
+            user_request
+        )
+
+    # ------------------------------------------------------------
+    # Fallback
+    # ------------------------------------------------------------
+
+    else:
+
+        result = tool_agent.execute_tool(
+            "text_analysis",
+            user_request
+        )
+
+    return {
+        "tool_result": str(
+            result
+        ),
+
+        "final_response": str(
+            result
+        ),
+    }
 
 
-    finally:
+# ================================================================
+# DIRECT NODE
+# ================================================================
 
-        memory_agent.close()
+def direct_node(
+    state: AgentState
+):
+    """
+    Handle simple requests directly.
+    """
+
+    user_request = state[
+        "user_request"
+    ].strip()
+
+    request_lower = user_request.lower()
+
+    # ------------------------------------------------------------
+    # Greetings
+    # ------------------------------------------------------------
+
+    if request_lower in {
+        "hello",
+        "hi",
+        "hey",
+        "hello!",
+        "hi!",
+        "hey!",
+        "hello, how are you?",
+    }:
+
+        response = (
+            "Hello! I'm your Multi-Agent Personal Assistant. "
+            "How can I help you today?"
+        )
+
+    # ------------------------------------------------------------
+    # Generic response
+    # ------------------------------------------------------------
+
+    else:
+
+        response = (
+            "I understand your request:\n\n"
+            f"{user_request}\n\n"
+            "This request does not require the research or "
+            "tool workflow, so it was handled directly."
+        )
+
+    return {
+        "final_response": response
+    }
 
 
-# ============================================================
-# RUN
-# ============================================================
+# ================================================================
+# MEMORY SAVE NODE
+# ================================================================
+
+def memory_save_node(
+    state: AgentState
+):
+    """
+    Save the completed interaction into memory.
+    """
+
+    user_request = state[
+        "user_request"
+    ]
+
+    final_response = state.get(
+        "final_response",
+        ""
+    )
+
+    if not final_response:
+
+        final_response = state.get(
+            "writing",
+            ""
+        )
+
+    try:
+
+        print(
+            "\nSaving memory..."
+        )
+
+        memory_content = (
+            f"User request: {user_request}\n"
+            f"Assistant response: {final_response}"
+        )
+
+        result = memory_agent.save_memory(
+            memory_content,
+            "conversation"
+        )
+
+        print(
+            "Memory saved successfully."
+        )
+
+        return {
+            "memory_saved": bool(
+                result
+                if result is not None
+                else True
+            )
+        }
+
+    except Exception:
+
+        return {
+            "memory_saved": False
+        }
+
+
+# ================================================================
+# BUILD WORKFLOW
+# ================================================================
+
+def build_workflow():
+    """
+    Build and compile the LangGraph workflow.
+    """
+
+    graph = StateGraph(
+        AgentState
+    )
+
+    # ------------------------------------------------------------
+    # Nodes
+    # ------------------------------------------------------------
+
+    graph.add_node(
+        "supervisor",
+        supervisor_node
+    )
+
+    graph.add_node(
+        "memory",
+        memory_node
+    )
+
+    graph.add_node(
+        "research",
+        research_node
+    )
+
+    graph.add_node(
+        "analysis",
+        analysis_node
+    )
+
+    graph.add_node(
+        "writing",
+        writing_node
+    )
+
+    graph.add_node(
+        "validator",
+        validation_node
+    )
+
+    graph.add_node(
+        "retry",
+        retry_node
+    )
+
+    graph.add_node(
+        "validation_failure",
+        validation_failure_node
+    )
+
+    graph.add_node(
+        "final",
+        final_response_node
+    )
+
+    graph.add_node(
+        "tool",
+        tool_node
+    )
+
+    graph.add_node(
+        "direct",
+        direct_node
+    )
+
+    graph.add_node(
+        "memory_save",
+        memory_save_node
+    )
+
+    # ------------------------------------------------------------
+    # START
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        START,
+        "supervisor"
+    )
+
+    # ------------------------------------------------------------
+    # Supervisor routing
+    # ------------------------------------------------------------
+
+    graph.add_conditional_edges(
+        "supervisor",
+        route_after_supervisor,
+        {
+            "memory": "memory",
+            "tool": "tool",
+            "direct": "direct",
+        }
+    )
+
+    # ------------------------------------------------------------
+    # Research workflow
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "memory",
+        "research"
+    )
+
+    graph.add_edge(
+        "research",
+        "analysis"
+    )
+
+    graph.add_edge(
+        "analysis",
+        "writing"
+    )
+
+    graph.add_edge(
+        "writing",
+        "validator"
+    )
+
+    # ------------------------------------------------------------
+    # Validation routing
+    # ------------------------------------------------------------
+
+    graph.add_conditional_edges(
+        "validator",
+        route_after_validation,
+        {
+            "final": "final",
+            "retry": "retry",
+            "validation_failure": "validation_failure",
+        }
+    )
+
+    # ------------------------------------------------------------
+    # Retry
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "retry",
+        "writing"
+    )
+
+    # ------------------------------------------------------------
+    # Valid final response
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "final",
+        "memory_save"
+    )
+
+    # ------------------------------------------------------------
+    # Validation failure
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "validation_failure",
+        "memory_save"
+    )
+
+    # ------------------------------------------------------------
+    # Tool workflow
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "tool",
+        "memory_save"
+    )
+
+    # ------------------------------------------------------------
+    # Direct workflow
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "direct",
+        "memory_save"
+    )
+
+    # ------------------------------------------------------------
+    # End
+    # ------------------------------------------------------------
+
+    graph.add_edge(
+        "memory_save",
+        END
+    )
+
+    return graph.compile()
+
+
+# ================================================================
+# CREATE DEFAULT WORKFLOW
+# ================================================================
+
+workflow = build_workflow()
+
+
+# ================================================================
+# DIRECT TEST
+# ================================================================
 
 if __name__ == "__main__":
 
-    main()
+    print("=" * 70)
+    print("MULTI-AGENT PERSONAL ASSISTANT WORKFLOW TEST")
+    print("=" * 70)
+
+    # ------------------------------------------------------------
+    # Research test
+    # ------------------------------------------------------------
+
+    print("\n1. RESEARCH REQUEST")
+
+    research_state = create_initial_state(
+        "research artificial intelligence in healthcare"
+    )
+
+    research_result = workflow.invoke(
+        research_state
+    )
+
+    print(
+        "\nRoute:",
+        research_result["route"]
+    )
+
+    print(
+        "\nValidation:",
+        research_result["validation"]
+    )
+
+    print(
+        "\nFinal Response:\n",
+        research_result["final_response"]
+    )
+
+    # ------------------------------------------------------------
+    # Tool test
+    # ------------------------------------------------------------
+
+    print("\n2. TOOL REQUEST")
+
+    tool_state = create_initial_state(
+        "calculate 25 * 40 + 100"
+    )
+
+    tool_result = workflow.invoke(
+        tool_state
+    )
+
+    print(
+        "\nRoute:",
+        tool_result["route"]
+    )
+
+    print(
+        "\nTool Result:",
+        tool_result["tool_result"]
+    )
+
+    print(
+        "\nFinal Response:",
+        tool_result["final_response"]
+    )
+
+    # ------------------------------------------------------------
+    # Direct test
+    # ------------------------------------------------------------
+
+    print("\n3. DIRECT REQUEST")
+
+    direct_state = create_initial_state(
+        "hello, how are you?"
+    )
+
+    direct_result = workflow.invoke(
+        direct_state
+    )
+
+    print(
+        "\nRoute:",
+        direct_result["route"]
+    )
+
+    print(
+        "\nFinal Response:",
+        direct_result["final_response"]
+    )
+
+    print("\n" + "=" * 70)
+    print("WORKFLOW TEST COMPLETED")
+    print("=" * 70)

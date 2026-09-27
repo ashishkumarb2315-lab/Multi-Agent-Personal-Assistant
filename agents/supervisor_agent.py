@@ -1,226 +1,164 @@
-import os
-
-from dotenv import load_dotenv
-from google import genai
-
-
-# ========================================================
-# LOAD ENVIRONMENT
-# ========================================================
-
-load_dotenv()
-
-
 class SupervisorAgent:
     """
-    Supervisor / Orchestrator Agent.
+    Supervisor Agent
 
-    Responsibilities:
-    - Understand the user's request
-    - Identify required agents
-    - Determine execution order
-    - Decide whether tools are required
-    - Produce a workflow decision
+    Determines which part of the multi-agent system should handle
+    the user's request.
+
+    Routes:
+        research -> explanation / information / comparison
+        tool     -> calculations / utilities
+        direct   -> simple conversational requests
     """
 
     def __init__(self):
-
-        api_key = os.getenv(
-            "GOOGLE_API_KEY"
-        )
-
-        if not api_key:
-
-            raise ValueError(
-                "GOOGLE_API_KEY is not set "
-                "in the .env file."
-            )
-
-        self.client = genai.Client(
-            api_key=api_key
-        )
-
-        self.primary_model = (
-            "gemini-3.8-flash"
-        )
-
-        self.fallback_model = (
-            "gemini-3.7-flash"
-        )
-
-    # ====================================================
-    # SUPERVISOR DECISION
-    # ====================================================
-
-    def decide_workflow(
-        self,
-        user_request: str
-    ) -> str:
-
-        if not user_request.strip():
-
-            raise ValueError(
-                "User request cannot be empty."
-            )
-
-        prompt = f"""
-You are the Supervisor Agent of a
-Multi-Agent Personal Assistant Swarm.
-
-Your job is to analyze the user's request
-and decide which specialized agents are
-required.
-
-AVAILABLE AGENTS:
-
-1. Planning Agent
-   - Breaks complex tasks into steps.
-
-2. Research Agent
-   - Performs information research.
-
-3. Analysis Agent
-   - Analyzes information and identifies insights.
-
-4. Writing Agent
-   - Produces structured written output.
-
-5. Tool Agent
-   - Performs calculations, date/time operations,
-     text analysis and other utilities.
-
-6. Memory Agent
-   - Stores and retrieves useful long-term context.
-
-7. Validator Agent
-   - Checks the quality and completeness
-     of generated results.
-
-Return your decision in exactly this structure:
-
-REQUEST TYPE:
-<type>
-
-REQUIRED AGENTS:
-<comma-separated list>
-
-EXECUTION ORDER:
-<ordered list>
-
-TOOL REQUIRED:
-<YES or NO>
-
-MEMORY REQUIRED:
-<YES or NO>
-
-REASONING:
-<short explanation>
-
-FINAL OBJECTIVE:
-<what the system should ultimately produce>
-
-USER REQUEST:
-{user_request}
-"""
-
-        models = [
-            self.primary_model,
-            self.fallback_model
+        self.tool_keywords = [
+            "calculate",
+            "calculator",
+            "compute",
+            "percentage",
+            "percent",
+            "sum",
+            "multiply",
+            "divide",
+            "addition",
+            "subtraction",
+            "subtract",
+            "multiply",
+            "date",
+            "time",
+            "current time"
         ]
 
-        last_error = None
+        self.research_keywords = [
+            "research",
+            "explain",
+            "what is",
+            "what are",
+            "who is",
+            "how does",
+            "how do",
+            "why",
+            "information",
+            "compare",
+            "comparison",
+            "difference",
+            "advantages",
+            "disadvantages",
+            "benefits",
+            "limitations",
+            "applications",
+            "define",
+            "meaning",
+            "tell me about",
+            "describe",
+            "machine learning",
+            "artificial intelligence",
+            "cloud computing",
+            "python",
+            "sql",
+            "databricks",
+            "azure data factory",
+            "adf"
+        ]
 
-        for model in models:
+    # =========================================================
+    # MAIN ROUTING METHOD
+    # =========================================================
 
-            try:
+    def route(self, user_request: str) -> str:
+        """
+        Decide which agent should handle the request.
 
-                response = (
-                    self.client.interactions.create(
-                        model=model,
-                        input=prompt
-                    )
-                )
+        Returns:
+            "tool"
+            "research"
+            "direct"
+        """
 
-                return response.output_text
-
-            except Exception as error:
-
-                last_error = error
-
-        raise RuntimeError(
-            f"Supervisor Agent failed. "
-            f"Last error: {last_error}"
-        )
-
-
-# ========================================================
-# TEST PROGRAM
-# ========================================================
-
-def main():
-
-    print()
-
-    print("=" * 60)
-    print("MULTI-AGENT PERSONAL ASSISTANT")
-    print("SUPERVISOR AGENT")
-    print("=" * 60)
-
-    try:
-
-        agent = SupervisorAgent()
-
-        request = input(
-            "\nEnter a user request:\n> "
-        ).strip()
+        request = (user_request or "").strip().lower()
 
         if not request:
+            return "direct"
 
-            print(
-                "\nERROR: Request cannot be empty."
-            )
+        # -----------------------------------------------------
+        # TOOL ROUTING
+        # -----------------------------------------------------
 
-            return
+        if self._is_tool_request(request):
+            return "tool"
 
-        print(
-            "\nSupervisor analyzing request..."
+        # -----------------------------------------------------
+        # RESEARCH ROUTING
+        # -----------------------------------------------------
+
+        if self._is_research_request(request):
+            return "research"
+
+        # -----------------------------------------------------
+        # DIRECT ROUTING
+        # -----------------------------------------------------
+
+        return "direct"
+
+    # =========================================================
+    # TOOL DETECTION
+    # =========================================================
+
+    def _is_tool_request(self, request: str) -> bool:
+
+        # Explicit calculation words
+        for keyword in self.tool_keywords:
+            if keyword in request:
+                return True
+
+        # Detect simple mathematical expressions
+        math_characters = ["+", "-", "*", "/", "%"]
+
+        has_number = any(char.isdigit() for char in request)
+        has_math_symbol = any(
+            symbol in request
+            for symbol in math_characters
         )
 
-        decision = agent.decide_workflow(
-            request
-        )
+        if has_number and has_math_symbol:
+            return True
 
-        print()
+        return False
 
-        print("=" * 60)
-        print("SUPERVISOR DECISION")
-        print("=" * 60)
+    # =========================================================
+    # RESEARCH DETECTION
+    # =========================================================
 
-        print(decision)
+    def _is_research_request(self, request: str) -> bool:
 
-    except Exception as error:
+        for keyword in self.research_keywords:
+            if keyword in request:
+                return True
 
-        print()
+        return False
 
-        print("=" * 60)
-        print("SUPERVISOR ERROR")
-        print("=" * 60)
+    # =========================================================
+    # COMPATIBILITY METHODS
+    # =========================================================
 
-        print(
-            f"Error Type: "
-            f"{type(error).__name__}"
-        )
+    def decide_route(self, user_request: str) -> str:
+        """
+        Compatibility method for older code.
+        """
 
-        print(
-            f"Error Message: "
-            f"{error}"
-        )
+        return self.route(user_request)
 
+    def get_route(self, user_request: str) -> str:
+        """
+        Compatibility method for older code.
+        """
 
-# ========================================================
-# RUN
-# ========================================================
+        return self.route(user_request)
 
-if __name__ == "__main__":
+    def classify(self, user_request: str) -> str:
+        """
+        Compatibility method for older code.
+        """
 
-    main()
+        return self.route(user_request)
